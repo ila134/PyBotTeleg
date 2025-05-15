@@ -1,0 +1,113 @@
+import telebot
+from telebot import types
+import time
+import logging
+import os
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)  # Fixed: changed 'name' to '__name__'
+
+# Инициализация бота
+TOKEN = '7531145285:AAGrOQFuzcivSWEgYxECLuvpMCYYQseOY6M'
+bot = telebot.TeleBot(TOKEN)
+
+# Глобальные переменные для хранения данных
+CASIO_DESCRIPTION = """
+Часы Casio – Надежность и стиль в каждой детали! Хотите часы, которые не подведут ни при каких обстоятельствах? Тогда выбирайте Casio!
+💪 Прочность: Защита от ударов и водонепроницаемость до 100 метров
+⌚️ Функциональность: Хронографы, будильники, таймеры
+🔋 Долговечность: Автономная работа до 10 лет
+🎨 Стиль: Широкий выбор моделей
+
+Casio - это ваш надежный спутник на каждый день!
+Закажите прямо сейчас и получите бесплатную доставку!
+"""
+
+PHOTOS = {
+    '1': './Casio_1.jpg',
+    '2': './Casio_2.jpg',
+    '3': './Casio_3.jpg'
+}
+
+def check_photos_exist():
+    """Проверяет существование фото перед запуском"""
+    for photo_id, path in PHOTOS.items():
+        if not os.path.exists(path):
+            logger.error(f"Фото {photo_id} не найдено по пути: {path}")
+            return False
+    return True
+
+# Обработчики команд
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    try:
+        bot.send_message(message.chat.id, 'Здравствуйте! Мы рады видеть вас ♕\nДля перехода к брендам напишите /catalog')
+        logger.info(f"Отправлено приветствие пользователю {message.chat.id}")
+    except Exception as e:
+        logger.error(f"Ошибка в send_welcome: {e}", exc_info=True)
+
+@bot.message_handler(commands=['catalog'])
+def show_catalog(message):
+    try:
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton('Casio'), types.KeyboardButton('Armani'))
+        bot.send_message(message.chat.id, 'Выберите бренд:', reply_markup=markup)
+        logger.info(f"Показан каталог пользователю {message.chat.id}")
+    except Exception as e:
+        logger.error(f"Ошибка в show_catalog: {e}", exc_info=True)
+
+@bot.message_handler(commands=['Casio'])
+@bot.message_handler(func=lambda message: message.text == 'Casio')
+def show_casio(message):
+    try:
+        bot.send_message(message.chat.id, CASIO_DESCRIPTION)
+
+        markup = types.InlineKeyboardMarkup()
+        for photo_id in PHOTOS:
+            markup.add(types.InlineKeyboardButton(f'Фото {photo_id}', callback_data=f'casio_{photo_id}'))
+        bot.send_message(message.chat.id, 'Выберите фото:', reply_markup=markup)
+        logger.info(f"Показано описание Casio пользователю {message.chat.id}")
+    except Exception as e:
+        logger.error(f"Ошибка в show_casio: {e}", exc_info=True)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('casio_'))
+def send_photo(call):
+    try:
+        photo_id = call.data.split('_')[1]
+        if photo_id in PHOTOS:
+            with open(PHOTOS[photo_id], 'rb') as photo:
+                bot.send_photo(call.message.chat.id, photo)
+            logger.info(f"Отправлено фото {photo_id} пользователю {call.message.chat.id}")
+        else:
+            bot.answer_callback_query(call.id, "Фото не найдено")
+            logger.warning(f"Запрошено несуществующее фото {photo_id}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке фото: {e}", exc_info=True)
+        bot.answer_callback_query(call.id, "Произошла ошибка при загрузке фото")
+
+def run_bot():
+    """Основная функция запуска бота с обработкой исключений"""
+    while True:
+        try:
+            logger.info("Запуск бота...")
+            if check_photos_exist():
+                bot.polling(none_stop=True, interval=2, timeout=30)
+            else:
+                logger.error("Не все фото найдены, бот не запущен")
+                break
+        except Exception as e:
+            logger.error(f"Бот упал с ошибкой: {e}", exc_info=True)
+            logger.info("Перезапуск через 15 секунд...")
+            time.sleep(15)
+
+if __name__ == '__main__':  # Fixed: corrected the syntax
+    logger.info("Инициализация бота...")
+    run_bot()
